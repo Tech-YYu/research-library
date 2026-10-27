@@ -1,0 +1,49 @@
+name: Publish rendered research library
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Extract rendered website
+        run: |
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          from zipfile import ZipFile
+          with ZipFile('website.zip') as archive:
+              for item in archive.infolist():
+                  path = PurePosixPath(item.filename)
+                  assert not path.is_absolute() and '..' not in path.parts, path
+                  assert path.name == '.nojekyll' or path.suffix in {'.html', '.css', '.js', '.json', '.svg', '.woff', '.woff2', '.xml', '.txt'}, path
+              archive.extractall('_site')
+          PY
+          test -f _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
